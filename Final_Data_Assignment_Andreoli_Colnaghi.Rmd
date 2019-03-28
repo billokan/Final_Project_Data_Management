@@ -1,0 +1,617 @@
+---
+title: "Final Data Assignment"
+author: "Lorenzo Andreoli & Riccardo Colnaghi"
+date: "12/14/2017"
+output: 
+  html_document:
+    number_sections: true
+    toc: true
+    fig_width: 10
+    code_folding: hide  
+    fig_height: 4.5
+    theme: flatly
+    highlight: tango
+
+---
+
+```{r load packages, message=FALSE, warning=FALSE}
+```
+
+# Introduction 
+<br>
+
+Over the last two decades, no continent has experienced such profound changes as Africa. The macro-region has seen its population growing from roughly 760 million people in 1997 to 1,270 million in 2017 (Worldometers, 2017), a GDP rate of growth above 4% in the last ten years (African Economic Outlook, 2017) as well as political metamorphosis for the majority of its member states. Although conflicts are still tearing the region and have been boosted by the recent developments in North Africa (Arab Spring), their nature and actors involved have mutated over time. 
+In this work, the following questions are addressed: Has the Arab Spring brought more peace within the African continent in the short and mid-term? How have conflicts over time varied in number, consequences and changed in type? Which are the main actors involved? Are there countries performing better than others?
+
+Specifically, this paper aims to assess how conflicts have changed since 1997 till 2016, assessing their type, nature, consequences and main actors involved. Starting from a general analysis of the African continent (Section 1), it moves analysing the single member states and telling between those touched by the Arab Spring and those who were not (Section 2). Section 3 offers conclusions and a summary of our findings. 
+
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+```
+
+# Methodology
+<br>
+
+This analysis is entirely based on the Database ACLED – Armed Conflict Location & Event Data Project. ACLED Conflict Trends reports are monthly updates on political violence, protest, and conflict events in African states. They are based on real-time data and compare current trends and patterns to historical dynamics in key focus countries.
+
+The database gathers data since 1997 till 2016 about the African conflicts. Through its multiple variables, the database provides with information regarding the type of conflicts (Event_Types), the leading actors involved (Actor_1; Actor_2) and their allies (Ally_Actor_1; Ally_Actor_2) as well as country (Country) and exact location (Location). Additional variables are provided and explained in detail in the ACLED Codebook (Raleigh & Dowd, 2017). 
+
+The database has been cleaned and adapted to this research’s purpose. Specifically, the analysis here proposed has been carried out through the statistical software R, where the database has been imported, cleaned by NAs and low capital cases and where relevant information for our analysis have been selected (please, see the R document attached in the Annex).
+
+# Introductive analysis of the dataset 
+<br>
+
+
+Simple introductiory data analysis of the dataset and basic cleaning. 
+The histogram shows the distribution of observations in the dataset over the years
+
+
+```{r, message=FALSE, warning=FALSE, results= FALSE}
+## Load necessarry packages 
+library(tidyverse)
+library(stringr)
+library(ggplot2)
+library(openintro)
+library(readxl)
+library(readr)
+library(DBI)
+library(httr)
+library(jsonlite)
+library(haven)
+library(gdata)
+library(lubridate)
+library(countrycode)
+library(gridExtra)
+library(cowplot)
+library(leaflet)
+library(leaflet.extras)
+library(magrittr)
+library(igraph)
+library(ggraph)
+library(htmlwidgets) 
+library(dygraphs) 
+library(flexdashboard) 
+library(shiny) 
+library(plotly) 
+library(geojsonio)
+library(geojsonlint)
+library(htmlwidgets)
+library(htmltools)
+library(maps)
+library(rworldmap)
+library(devtools)
+
+setwd("~/Desktop/Hertie/third-semester/1.Data_Management_R/GitHub/Final_Project_Data_Management")
+
+# Import Dataset 
+df <- data.frame(read_xlsx("ACLED-Version-7-All-Africa-1997-2016_dyadic-file.xlsx"))
+class(df)
+
+# Explore the raw data 
+# Are there any NAs? 
+any(is.na(df))
+# How many NAs? 
+sum(is.na(df))
+# Are there missing values? 
+any(!complete.cases(df))
+# view dimension 
+dim(df)
+# name of columns 
+names(df)
+# structure of dataframe 
+str(df)
+# structure with dplyr
+glimpse(df)
+# summary data 
+summary(df)
+# lower Capital letters of variables 
+names(df)<- tolower(names(df))
+# Event Type description
+table(df$event_type)
+# frequency for each year 
+hist(df$year) 
+
+```
+
+# Which countries are more belligerent? and which ones are more peaceful?
+<br>
+To an economic growth over the last two decades it has no corresponded a political stability growth and a decrease in conflicts within the African continent.
+
+Since 1997 over 140.000 conflicts have occurred, spread unequally between member states. As visible in Figure 1, Somalia, Democratic Republic of Congo, Sudan, Nigeria and South Africa have been the countries with the highest number of conflicts in the last 19 years. Equatorial Guinea, Botswana, Djibouti, Lesotho, Benin those with the least amount of conflicts (see Annex for a more precise geographic visualization). 
+
+Naturally, population amount and density play a role as the latter have on average a smaller population than the former. However, even when taken into account, it seems that population is not the primary conflict's driver: Ethiopia, Tanzania, Ghana, Algeria or Mozambique are all countries with at least the double of the population of Somalia, leader for conflicts in the ranking. GDP pro capita is also not a clear-cut driver: wealthier states such as South Africa and Egypt have positioned quite high in the ranking, while Eritrea and Malawi – among the most impoverished countries within Africa – have scored low regarding conflicts. There seems to be no clear-cut identifiable driver. 
+
+Different variables are often addressed to be the primary causes for conflicts: natural resources endowments for instance, but even in this case, the correlation is not straightforward. A similar reasoning applies, for example, to foreign aid, and to corruption indexes.
+
+Although difficult to understand the underlying causes (Ong’ayo, 2008), readily observable is the fact that conflicts are driven mainly by political instabilities, expressed in different forms. Somalia, for instance, is still currently experiencing a civil war started in 1986. The Democratic Republic of Congo changed its President in May 1997 and suffered a war from 1998 to 2003 followed by further political instabilities. A similar unstable situation applies for Sudan as well.  
+
+```{r, message=FALSE, warning=FALSE, results= FALSE}
+# Top 15 countries with the most conflicts 
+
+n_conf_count <- df %>% group_by(country) %>%
+        summarise(number_conflicts = n()) %>%
+        arrange(desc(number_conflicts))
+
+num_conf_country_top <- head(n_conf_count,15)
+num_conf_country_top$country <- as.factor(num_conf_country_top$country)
+
+plot1 <- ggplot(num_conf_country_top, aes(x = reorder(country, number_conflicts), 
+                                  y = number_conflicts)) +
+        geom_bar(stat='identity',colour="black", fill = "dark red") +
+        geom_text(aes(x = country, y = 1, 
+                      label = paste0("(",number_conflicts,")",sep="")),
+                  hjust=-0.1, vjust=.5, size = 2.5, colour = 'white') +
+        labs(x = 'Country',
+             y = 'Number of Conflicts', 
+             title = 'Countries with the most conflicts') +
+        theme_bw()+
+        theme(axis.text.x = element_text(angle = 90),
+              axis.text.y = element_text(size = 10),
+              plot.title = element_text(size=10, face = "bold"),
+              axis.title.x = element_text(size = 10),
+              axis.title.y = element_text(size = 10),
+              legend.text = element_text(size = 10)) +
+        coord_flip() 
+
+# Bottom 15 countries with the least conflcits 
+
+num_conf_country_bot <- tail(n_conf_count,15)
+num_conf_country_bot$country <- as.factor(num_conf_country_bot$country)
+
+plot2 <- ggplot(num_conf_country_bot, aes(x = reorder(country, number_conflicts), 
+                             y = number_conflicts)) +
+        geom_bar(stat='identity',colour="black", fill = "light blue") +
+        geom_text(aes(x = country, y= 1, 
+                      label = paste0("(",number_conflicts,")",sep="")),
+                  hjust=-0.2, vjust=.5, size = 2.5, colour = 'black') +
+        labs(x = 'Country',
+             y = 'Number of Conflicts', 
+             title = 'Countries with the least conflicts') +
+        theme_bw()+
+        theme(axis.text.x = element_text(angle = 90),
+              axis.text.y = element_text(size = 10),
+              plot.title = element_text(size=10, face = "bold"),
+              axis.title.x = element_text(size = 10),
+              axis.title.y = element_text(size = 10),
+              legend.text = element_text(size = 10)) +
+        coord_flip() 
+      
+# merge the two graphs
+plot1_2 <- plot_grid(plot1, plot2)
+plot1_2
+```
+
+
+# The Arab Spring Effect
+<br>
+
+Recently, North Africa has gone through new political instabilities, born by the populations’ desire of moving from dictatorial regimes to democratic ones. Media refer to it as “Arab Spring”, a revolutionary wave which hit Algeria, Djibouti, Libya, Morocco, Egypt, Sudan and Tunisia starting December 2010 and it protacted throughout 2011. 
+
+```{r, message=FALSE, warning=FALSE, out.width='900'}
+# Where riots and protests took place from 2010 and 2011: A visual representation of the Arab Spring 
+
+RP = "Riots/Protests"
+
+RP_map = df %>% 
+        filter(!is.na(latitude)) %>%
+        filter(!is.na(longitude)) %>%
+        filter(str_detect(event_type, RP) ) %>%
+        filter(year == 2010:2011)
+
+factpal <- colorFactor(c("#ca0020","#404040"), 
+                       RP_map$year)
+
+center_lon = median(RP_map$longitude)
+center_lat = median(RP_map$latitude)
+
+plot6 <- leaflet(RP_map) %>% addTiles() %>%
+        addCircles(lng = ~longitude, lat = ~latitude,radius = ~(fatalities),
+                   color = ~factpal(year),
+                   popup = ~notes)  %>%
+        addLegend("bottomleft", pal = factpal, values = ~year,
+                  title = "Protests and Riots between 2010-2011")
+plot6
+```
+<br>
+
+The majority of these countries do not appear in the 1997-2016 ranking, but they do when breaking down the period in two sub-periods: 1997-2009 and 2010-2016 as visible from the graph below (Conflicts between 2010-2016). While Somalia stays at the top, Libya, Tunisia, Egypt, and Sudan are coming in, shocked by the revolutionary streams (please check the Annex to open the graph on R).
+
+Since 2010, the volume of total conflicts sharply augments, and it profoundly changes in its nature. Although the category riots/protests have been almost zero until 2009, when it becomes the main reason for conflicts since the Arab Spring beginning. Before the turning point in 2010, the majority of conflicts were attributable to “a battle between two violent armed groups where control of the contested location does not change” (Battle No Change of Territory), after it, they are side-by-side with an alternative type of conflicts, namely the mentioned riots/protests as well as violence against civilians (occurred whenever any armed/violent group attacked civilians – variable name: Violence Against Civilians). 
+<br>
+```{r}
+# Evolution of the type of conflicts over years 
+
+conf_year <- df %>% group_by(event_type, year) %>%
+        summarise(number_conflicts = n()) %>%
+        arrange(desc(number_conflicts))
+
+conf_year$event_type <- as.factor(conf_year$event_type)
+conf_year$year <- as.numeric(as.character(conf_year$year))
+conf_year$number_conflicts <- as.numeric(as.character(conf_year$number_conflicts))
+                            
+plot5 <- conf_year %>% 
+        ggplot(aes(x=year, y=number_conflicts,group=event_type, color= event_type)) +
+        geom_line() +
+        scale_x_continuous(limits = c(1997,2016), expand = c(0, 0), breaks= 1997:2016) +
+        scale_y_continuous(limits = c(0,7000), expand = c(0, 0)) +
+        labs(x = "Years",
+             y = "Number of Conflicts",
+             color = "Legend",
+             title = "How conflicts changed over years") +
+        theme_bw()+
+        theme(axis.text.x = element_text(angle = 90, vjust = (-.1)),
+              plot.title = element_text(size=12, face = "bold"),
+              axis.title.x = element_text(size = 10),
+              axis.title.y = element_text(size = 10),
+              legend.text = element_text(size = 10), 
+              legend.position = 'bottom')
+plot5
+```
+
+```{r, message=FALSE, warning=FALSE, results= FALSE, fig.align = 'center', fig.width= 12, fig.height= 6}
+# conflicts by event type between 1997 and 2009 
+conf_num_97 = df %>% group_by(country,event_type, year) %>%
+        summarise(number_conflicts = n()) %>%
+        arrange(desc(number_conflicts))
+
+conf_num_97$country = as.factor(conf_num_97$country)
+conf_num_97$event_type = as.factor(conf_num_97$event_type)
+conf_num_97$year = as.factor(conf_num_97$year)
+
+plot3 <- conf_num_97 %>%  filter(year %in% 
+        c("1997", "1998", "1999", "2000", "2001","2002","2003","2004","2005","2006","2007","2008","2009")) %>% 
+ggplot(aes(x= reorder(country, number_conflicts), y=number_conflicts, fill=event_type)) +
+        geom_bar(stat = 'identity', position = position_stack(reverse = TRUE)) +
+        scale_y_continuous(limits = c(0,5000), expand = c(0, 0)) +
+        coord_flip() +
+        labs(x = "Country",
+             y = "Number of Conflicts",
+             fill = "Legend",
+             title = "Conflicts between 1997-2009") +
+        theme_bw()+
+        theme(axis.text.y = element_text(size = 5, face = "bold"),
+              axis.text.x = element_text(angle = 90, vjust = (-.1)),
+              plot.title = element_text(size=12, face = "bold"),
+              axis.title.x = element_text(size = 10),
+              axis.title.y = element_text(size = 10),
+              legend.text = element_text(size = 8))
+
+
+
+# conflicts by event type between 2010 and 2016
+conf_num_97 = df %>% group_by(country,event_type, year) %>%
+        summarise(number_conflicts = n()) %>%
+        arrange(desc(number_conflicts))
+
+conf_num_97$country = as.factor(conf_num_97$country)
+conf_num_97$event_type = as.factor(conf_num_97$event_type)
+conf_num_97$year = as.factor(conf_num_97$year)
+
+plot4 <- conf_num_97 %>%  filter(year %in% 
+        c("2010","2011","2012","2013", "2014", "2015", "2016")) %>% 
+        ggplot(aes(x= reorder(country, number_conflicts), y=number_conflicts, fill=event_type)) +
+        geom_bar(stat = 'identity', position = position_stack(reverse = TRUE)) +
+        scale_y_continuous(limits = c(0,17000), expand = c(0, 0)) +
+        coord_flip() +
+        labs(x = "Country",
+             y = "Number of Conflicts",
+             fill = "Legend",
+             title = "Conflicts between 2010-2016") +
+        theme_bw()+
+        theme(axis.text.y = element_text(size = 5, face = "bold"),
+              axis.text.x = element_text(angle = 90, vjust = (-.1)),
+              plot.title = element_text(size=12, face = "bold"),
+              axis.title.x = element_text(size = 10),
+              axis.title.y = element_text(size = 10),
+              legend.text = element_text(size = 8))
+
+# Merge the two graphs 
+bottom_plots <- plot_grid(plot3 + theme(legend.position="none"), 
+                          plot4 + theme(legend.position="none"), 
+                          align = 'h', rel_widths = c(1, 1.5))
+
+
+legend2 <- get_legend(plot4+ theme(legend.position="bottom"))
+plot4_5 <-plot_grid(bottom_plots, legend2, ncol = 1, rel_heights = c(1, .2))
+plot4_5
+```
+
+The figure above is displaying something furtherly insightful. Looking at the overall evolution of the nature of conflicts over years, we noticed that riots and protests have increased in volume for the whole African continent. However, differently, from what we could expect, protests have grown since 2010 not only for countries affected by the Arab Spring but within the sub-Saharan region as well, as noticeable by the comparison between conflicts 199-2009 and conflicts 2010-2016 looking at the blue areas.
+
+In other words, the Arab Spring seems to have affected the whole continent beyond the usually mentioned nations and stimulated different populations protesting against their governments. In fact, out of 49 African countries analysed, above 65% experienced a higher number of total conflicts between 2010 and 2016 compared to 1997-2009
+
+This is visible from the following graph, in which countries conventionally touched by the Arab Spring (on the left) have all registered an increase in protests from 2010 to 2016. However, on the right in green, protests have also augmented in the same period for multiple sub-Saharan countries namely South Africa, Burundi, Nigeria, and Ethiopia. The revolutionary wave was not only constrained to Arab countries but affected also other African countries.
+
+```{r, message=FALSE, warning=FALSE, fig.width= 9,fig.height=7, fig.align= 'center'}
+conf_num_arab = df %>% 
+        group_by(country,event_type, year) %>%
+        summarise(number_conflicts = n()) %>%
+        arrange(desc(number_conflicts))
+
+conf_num_arab$cou = as.factor(conf_num_arab$country)
+conf_num_arab$event_type = as.factor(conf_num_arab$event_type)
+conf_num_arab$year = as.factor(conf_num_arab$year)
+
+plot7 <- conf_num_arab %>%  
+        filter(year %in% c("2010","2011","2012","2013", "2014", "2015", "2016")) %>% 
+        filter(country %in% c("Egypt", "Libya","Tunisia", "Morocco", "Algeria", "Sudan", "Djibouti")) %>% 
+        ggplot(aes(x= reorder(country, number_conflicts), y=number_conflicts, fill=event_type)) +
+        geom_bar(stat = 'identity', position = position_stack(reverse = TRUE)) +
+        scale_fill_manual(name = 'Legend',
+                           breaks = c("Battle-Government regains territory",
+                                      "Battle-No change of territory", 
+                                      "Battle-Non-state actor overtakes territory",
+                                      "Headquarters or base established",
+                                      "Non-violent transfer of territory", 
+                                      "Remote violence", 
+                                      "Riots/Protests", 
+                                      "Strategic development", 
+                                      "Violence against civilians"),
+                           values = c("Battle-Government regains territory"  = "#F8766D",
+                                      "Battle-No change of territory" = "#D39200", 
+                                      "Battle-Non-state actor overtakes territory" = "#93AA00",
+                                      "Headquarters or base established" = "#00BA38", 
+                                      "Non-violent transfer of territory" = "#00C19F" , 
+                                      "Remote violence" = "#00B9E3", 
+                                      "Riots/Protests" = "#619CFF",
+                                      "Strategic development" = "#DB72FB", 
+                                      "Violence against civilians" = "#FF61C3")) +
+        scale_y_continuous(limits = c(0,8000), expand = c(0, 0)) +
+        labs(x = "Country",
+             y = "Number of Conflicts",
+             fill = "Legend",
+             title = "Conflicts in Countries of the Arab Spring") +
+        theme_bw()+
+        theme(axis.text.y = element_text(size = 10),
+              axis.text.x = element_text(angle = 90, vjust = (-.1)),
+              plot.title = element_text(size=10, face = "bold"),
+              axis.title.x = element_text(size = 10),
+              axis.title.y = element_text(size = 10),
+              legend.text = element_text(size = 7))
+
+conf_num_no_arab = df %>% 
+        group_by(country,event_type, year) %>%
+        filter(year %in% c("2010","2011","2012","2013", "2014", "2015", "2016")) %>% 
+        filter(!country %in% c("Egypt", "Libya","Tunisia", "Morocco", "Algeria", "Sudan", "Djibouti")) %>% 
+        summarise(number_conflicts = n()) %>%
+        arrange(desc(number_conflicts))
+
+conf_num_no_arab$cou = as.factor(conf_num_no_arab$country)
+conf_num_no_arab$event_type = as.factor(conf_num_no_arab$event_type)
+conf_num_no_arab$year = as.factor(conf_num_no_arab$year)
+
+plot8 <-ggplot(conf_num_no_arab[0:40,], 
+               aes(x= reorder(country, number_conflicts), y=number_conflicts, fill=event_type)) +
+        geom_bar(stat = 'identity', position = position_stack(reverse = TRUE)) +
+        scale_fill_manual(name = 'Legend',
+                           breaks = c("Battle-No change of territory", 
+                                      "Remote violence", 
+                                      "Riots/Protests", 
+                                      "Strategic development", 
+                                      "Violence against civilians"),
+                           values = c("Battle-No change of territory" = "#D39200",  
+                                      "Remote violence" = "#00B9E3", 
+                                      "Riots/Protests" = "#619CFF",
+                                      "Strategic development" = "#DB72FB", 
+                                      "Violence against civilians" = "#FF61C3")) +
+        scale_y_continuous(limits = c(0,13000), expand = c(0, 0)) +
+        labs(x = "Country",
+             y = "Number of Conflicts",
+             fill = "Legend",
+             title = "Conflicts in Countries NOT in the Arab Sping") +
+        theme_bw()+
+        theme(axis.text.y = element_text(size = 10),
+              axis.text.x = element_text(angle = 90, vjust = (-.1)),
+              plot.title = element_text(size=10, face = "bold"),
+              axis.title.x = element_text(size = 10),
+              axis.title.y = element_text(size = 10),
+              legend.text = element_text(size = 7))
+plot7 + theme(legend.position="bottom")
+plot8 + theme(legend.position="bottom")
+```
+
+
+The change in nature of the conflicts has led to modifications in their consequences as well. Figure 4, presents the volume of conflicts and fatalities since 1997. To a clear-cut increase in the number of conflicts, it has no directly corresponded a growth in fatalities. Although fatalities experienced a moderate growth since 2010, their total amount in 2016 (roughly 20.000) is significantly reduced compared to 1997, where the number of deaths has been close to 50.000. 
+
+This is due to the mentioned change in conflicts' nature: fewer and fewer wars are going on in Africa, but more and more relatively peaceful protests/riots asking for a higher degree of democracy are happening. Naturally, since 2010, the number of fatalities have registered a small increase anyway due to violent repressions ordered by the governments against civilians in some countries as happened in Egypt where since 2013 more than 1,300 people have been killed by security forces (Amnesty International, 2014).
+
+```{r, message=FALSE, warning=FALSE, fig.align = 'center'}
+fat_conf <- df %>% 
+        group_by(event_type, year, actor1, fatalities) %>%
+        summarise(number_conflicts = n()) %>%
+        arrange(desc(number_conflicts)) 
+
+fat_conf$event_type <- as.factor(fat_conf$event_type)
+fat_conf$year <- as.numeric(as.character(fat_conf$year))
+fat_conf$number_conflicts <- as.numeric(as.character(fat_conf$number_conflicts))
+fat_conf$fatalities <- as.numeric(as.character(fat_conf$fatalities))
+
+plot_con <-fat_conf %>%         
+        ggplot(aes(x= year, y= number_conflicts, fill = "red")) +
+        geom_bar(stat = 'identity', position = position_stack(reverse = TRUE))+
+        labs(x = "Years",
+         y = "Conflicts",
+        title = "Conflicts  over years") +
+        guides(fill=FALSE)
+
+plot_fat <-fat_conf %>%         
+        ggplot(aes(x= year, y= fatalities)) +
+        geom_bar(stat = 'identity', position = position_stack(reverse = TRUE))+
+        labs(x = "Years",
+             y = "Fatalities",
+             title = "Fatalities  over years") +
+        guides(fill=FALSE)
+
+plot12 <- plot_grid(plot_con,plot_fat, align = "v", labels = "AUTO", ncol = 1)
+plot12
+```
+
+# The type of actors involved 
+<br>
+
+Different type of actors took actively part to conflicts. From this perspective, no North African countries “conventionally” influenced by the Arab Spring (Algeria, Djibouti, Libya, Morocco, Egypt, Sudan and Tunisia) are visible as their actors were fragmented and spread over multiple protests. The most recurrent actors were in fact linked to countries where civil and political wars were/are in place. 
+```{r, message=FALSE, warning=FALSE, fig.align = 'center'}
+actor_involved_1 = df %>% 
+        group_by(actor1) %>% 
+        summarise(act_inv = n()) %>%
+        arrange(desc(act_inv)) 
+
+actor_involved_2 = df %>% 
+        group_by(actor2) %>% 
+        summarise(act_inv = n()) %>%
+        arrange(desc(act_inv))
+
+colnames(actor_involved_1) = c("Actor","Frequency")
+colnames(actor_involved_2) = c("Actor","Frequency")
+
+actor_involved_tot = rbind(actor_involved_1,actor_involved_2)
+
+actor_involved_tot = actor_involved_tot %>%
+        group_by(Actor) %>%
+        summarise(act_inv = sum(Frequency)) %>%
+        arrange(desc(act_inv))
+
+Civilians = "Civilians"
+Protesters  = "Protesters"
+Rioters  = "Rioters"
+Military ="Military Forces of"
+Unidentified = "Unidentified"
+
+actor_involved_tot = actor_involved_tot   %>%
+        filter(!str_detect(Actor,Unidentified) ) %>%
+        filter(!str_detect(Actor,Protesters) ) %>%
+        filter(!str_detect(Actor,Rioters) ) %>%
+        filter(!str_detect(Actor,Military) ) %>% 
+        filter(!str_detect(Actor,Civilians) ) 
+
+plot9 <- ggplot(actor_involved_tot[0:25,], aes(x = reorder(Actor, act_inv),y = act_inv)) +
+        geom_bar(stat='identity',colour="black", fill = c("dark blue")) +
+        geom_text(aes(x = Actor, y=1, label = paste0("(",act_inv,")",sep="")),
+                  hjust=-.2, vjust=.5, size = 3, colour = 'white') +
+        labs(x = 'Actor', y = 'Number of Conflicts', title = '25 most Active Actors in Conflicts') +
+        scale_y_continuous(limits = c(0,8000), expand = c(0, 0)) +
+        coord_flip() + 
+        theme_bw()+
+theme(axis.text.x = element_text(angle = 90, vjust = (-.1)), 
+      legend.position="bottom",
+      plot.title = element_text(size=10, face = "bold"),
+      axis.title.x = element_text(size = 10),
+      axis.title.y = element_text(size = 10),
+      legend.text = element_text(size = 10))
+plot9
+```
+
+
+Al Shaabab – a jihadist fundamentalist group based in East Africa and especially in Somalia – leads the ranking with over 7585 conflicts in which it took part. To the first, follow Lords Resistance Army (LRA) a rebel group and heterodox Christian cult which operates in northern Uganda, South Sudan, the Central African Republic, and the Democratic Republic of the Congo; National Union for the Total Independence of Angola (UNITA) a political party of Angola; and the Revolutionary United Front (RUF) a rebel army that fought a failed eleven-year war in Sierra Leone, starting in 1991 and ending in 2002.
+
+These frequent actors involved, confirm that the first cause of conflicts has a political root. The most violent actors were mainly driven by desire in obtaining or maintain power and control at a government level. The only Arab Country here represented is Egypt, where the government has frequently used the police to keep the riots down. As for Tunisia, Algeria and Morocco instead, protests were less violent. In fact, the number of fatalities is also higher among states where civil and political wars were/are on, instead of protests/riots deriving from the Arab Spring wave.
+
+
+# The LRA Movements and “Kony 2012”
+<br>
+
+For the sake of curiosity, we here zoom into a specific actor involved: the Lords Resistance Army (LRA) as it was highly advertised by the documentary Kony 2012 (Invisible Children, 2012). The film advocates the restoration of social order and curtailing compelled and coerced youth military service. The film's purpose was to promote the charity's "Stop Kony" movement to make Ugandan cult and militia leader, indicted war criminal and the International Criminal Court fugitive Joseph Kony. As of October 2017, the film received over 100 million views augmenting worldwide acknowledgment of LRA. Joseph Kony is currently still free and hunt by the United States and Uganda for his crimes, although not considered a significant danger anymore as its military force has shrunk down to few hundreds of soldiers (starting from over 3000 in early years). The first figure below displays the numbers of LRA conflicts over time and how they decreased since 2010. The second figure, shows the geographical trend of LRA’s conflicts, confirming that it moved out from Uganda to South Sudan, Democratic Republic of Congo and The Central African Republic. This path can be the result of the joint effort of Uganda and United States to persecute and scatter the armed group.
+
+``` {r, message=FALSE, warning=FALSE, fig.align = 'center'}
+## Timeline of LRA operations 
+LRA_time <- df %>% group_by(event_type, year, actor1, fatalities) %>%
+        filter(actor1 == "LRA: Lords Resistance Army") %>% 
+        summarise(number_conflicts = n()) %>%
+        arrange(desc(number_conflicts)) %>% 
+        ggplot(aes(x=year, y=number_conflicts,fill=event_type)) +
+        geom_bar(stat = 'identity')+
+        labs(x = "Years",
+             y = "Conflicts",
+             color = "Legend",
+             title = "Conflicts involving LRA over years") +
+        scale_x_continuous(limits = c(1997,2016), expand = c(0, 0), breaks= 1997:2016) +
+        theme_bw()+
+        theme(axis.text.x = element_text(angle = 90, vjust = (-.005)), 
+              legend.position="bottom",
+              plot.title = element_text(size=10, face = "bold"),
+              axis.title.x = element_text(size = 10),
+              axis.title.y = element_text(size = 10),
+              legend.text = element_text(size = 10))
+plot10 <- LRA_time
+ggplotly(plot10)
+```
+
+<br>
+**A visual representation of LRA crime locations over the years** 
+
+```{r, message=FALSE, warning=FALSE, out.width='900'}
+LRA <- df %>%
+        filter(actor1 == "LRA: Lords Resistance Army") %>% 
+        filter(!is.na(latitude)) %>%
+        filter(!is.na(longitude)) %>% 
+        filter(!is.na(year))
+     
+
+factpal <- colorFactor(c("#ca0020","#f4a582","#f7f7f7","#92c5de","#404040"), 
+                       LRA$year)
+
+lon <- median(LRA$longitude)
+lat <- median(LRA$latitude)
+
+plot11 <- leaflet(LRA) %>% addTiles() %>%
+        addCircles(lng = ~longitude, lat = ~latitude,radius = ~(fatalities),
+                   popup = ~notes, 
+                   color = ~factpal(year))  %>%
+        setView(lng=lon, lat=lat,zoom = 5) %>%
+        addLegend("bottomright", pal = factpal, values = ~year,
+                  title = "Operating Years of LRA")
+plot11
+```
+
+# Conclusion 
+<br>
+
+Africa has experienced an increasing number of conflicts over time. Conflicts have augmented, and changed in nature with an impressive higher number of riots and protests started in 2010 due to the Arab Spring. Through our analysis, we found out that the Arab Spring did not involve only North African countries, but it indirectly affected the continent as a whole. The majority of African countries experienced more conflicts between 2010 and 2016 rather than 1997 and 2009. While the Arab Spring mainly involved fragmented actors, civil wars have seen the same actors repetitively taking part in conflicts. Additionally, we found that as the nature of conflicts changed, their consequences modified as well: although conflicts have grown at a continent level, fatalities did not grow at the same rate, and they decreased since 1997 in absolute terms.
+Finally, for the sake of curiosity, we paused on the LRA for a moment and found out that it moved away from its original country (Uganda) as well as reduced its activeness over time confirming what media are stating about their scattering. 
+
+In a nutshell, conflicts seem to have not abandoned Africa yet. Although the Arab Spring has led to a change in their nature and tensions towards democratization, it seems to have brought even more instability within the region. In fact, despite the number of fatalities has diminished over time, conflicts volume has augmented, and political instability seems to be higher than ever.
+
+# Extra 
+<br>
+```{r, message=FALSE, warning=FALSE, out.width='900'}
+## Interactive Maps with the Fatalities 
+
+plot13 <- leaflet() %>% addTiles() %>%
+        addMarkers(data=df,
+                   clusterOptions = markerClusterOptions(),
+                   clusterId = "fatalities") %>%
+        addEasyButton(easyButton(
+                states = list(
+                        easyButtonState(
+                                stateName="unfrozen-markers",
+                                icon="close",
+                                title="Freeze Clusters",
+                                onClick = JS("
+                                             function(btn, map) {
+                                             var clusterManager =
+                                             map.layerManager.getLayer('cluster', 'warCluster');
+                                             clusterManager.freezeAtZoom();
+                                             popup=~as.character(fatalities);
+                                             btn.state('frozen-markers');
+                                             }")
+      ),
+      easyButtonState(
+              stateName="frozen-markers",
+              icon="close",
+              title="UnFreeze Clusters",
+              onClick = JS("
+                           function(btn, map) {
+                           var clusterManager =
+                           map.layerManager.getLayer('cluster', 'warCluster');
+                           clusterManager.unfreeze();
+                           popup=~as.character(fatalities);
+                           btn.state('unfrozen-markers');
+                           }")
+      )
+              )
+              ))
+plot13
+```
+<br>
+
+
